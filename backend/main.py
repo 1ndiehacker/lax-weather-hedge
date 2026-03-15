@@ -5,7 +5,6 @@ from typing import Dict, List, Any
 import os
 import json
 from datetime import datetime, timedelta
-
 from openai import OpenAI
 
 app = FastAPI(title="LAX Weather Hedge API v1.0")
@@ -56,7 +55,7 @@ async def get_market_status():
 
 @app.post("/api/hedge-proposal")
 async def generate_hedge_proposal(proposal: HedgeProposal):
-    results: Dict[str, Any] = {}
+    results = {}
     for ladder in proposal.ladders:
         fair_price = ladder.model_prob
         target_contracts = 8 if "80-82" in ladder.name else 5
@@ -84,15 +83,8 @@ async def analyze_cut_candidates(ladders: List[Ladder]):
         edge_cond = edge < 0
         time_cond = time_ratio > 0.4
         pnl_cond = pnl_pct < -30
-        if edge_cond and (time_cond or pnl_cond):
-            priority = 3
-            recommendation = "CUT"
-        elif edge < -0.05:
-            priority = 1
-            recommendation = "WEAK"
-        else:
-            priority = 0
-            recommendation = "HOLD"
+        priority = 3 if edge_cond and (time_cond or pnl_cond) else 1 if edge < -0.05 else 0
+        recommendation = "CUT" if priority == 3 else "WEAK" if priority == 1 else "HOLD"
         analysis.append({
             "ladder": ladder.name,
             "edge": round(edge, 3),
@@ -106,14 +98,15 @@ async def analyze_cut_candidates(ladders: List[Ladder]):
 
 @app.post("/api/ai-commentary")
 async def generate_ai_commentary(data: Dict[str, Any]):
-    prompt = f"""LAX天気ヘッジ状況:
-{json.dumps(data, ensure_ascii=False, indent=2)}
+    prompt = f"""LAX Weather Hedge Status:
+{json.dumps(data, indent=2)}
 
-日本語150文字以内で実況せよ:
-1. 一言結論
-2. 理由3点
-3. 次アクション
-自然語で初心者向け。"""
+English commentary (150 chars max):
+1. One line conclusion
+2. 3 bullet reasons
+3. Next action
+
+Beginner friendly language."""
     try:
         response = client.chat.completions.create(
             model="anthropic/claude-3.5-sonnet:20240620",
@@ -123,7 +116,7 @@ async def generate_ai_commentary(data: Dict[str, Any]):
         )
         return {"commentary": response.choices[0].message.content.strip()}
     except Exception:
-        return {"commentary": "AI接続エラー。ルール判定を参照してください。"}
+        return {"commentary": "AI connection error. Check rule-based signals."}
 
 if __name__ == "__main__":
     import uvicorn
